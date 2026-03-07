@@ -15,6 +15,6 @@ export class SigningController {
   async verify(@Body() body: { data_base64: string; signature: string; key_id: string }) {
     const data = Buffer.from(body.data_base64, 'base64');
     const valid = await this.svc.verify(data, body.signature, body.key_id);
-    return { valid };
+    return { valid, reason: valid ? undefined : 'INVALID_SIGNATURE_OR_REVOKED_KEY' };
   }
 }

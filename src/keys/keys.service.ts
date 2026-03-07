@@ -9,6 +9,9 @@ export interface ManagedKey {
   algorithm: string;
   createdAt: Date;
   active: boolean;
+  revoked: boolean;
+  revokedAt?: Date;
+  revokeReason?: string;
 }
 
 @Injectable()
@@ -25,8 +28,7 @@ export class KeysService implements OnModuleInit {
   }
 
   generateKey(purpose: string): ManagedKey {
-    const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519', {
       publicKeyEncoding: { type: 'spki', format: 'pem' },
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
@@ -37,9 +39,10 @@ export class KeysService implements OnModuleInit {
       purpose,
       publicKey: publicKey as string,
       privateKey: privateKey as string,
-      algorithm: 'RSA-SHA256',
+      algorithm: 'Ed25519',
       createdAt: new Date(),
       active: true,
+      revoked: false,
     };
 
     // Deactivate old keys for same purpose
@@ -58,7 +61,7 @@ export class KeysService implements OnModuleInit {
 
   getActiveKey(purpose: string): ManagedKey | undefined {
     for (const key of this.keys.values()) {
-      if (key.purpose === purpose && key.active) return key;
+      if (key.purpose === purpose && key.active && !key.revoked) return key;
     }
     return undefined;
   }
@@ -72,5 +75,16 @@ export class KeysService implements OnModuleInit {
     const old = this.getActiveKey(purpose);
     const newKey = this.generateKey(purpose);
     return { new_key_id: newKey.keyId, old_key_id: old?.keyId };
+  }
+
+  revokeKey(keyId: string, reason?: string): { revoked: boolean; key_id: string; reason?: string } {
+    const key = this.keys.get(keyId);
+    if (!key) return { revoked: false, key_id: keyId, reason: 'KEY_NOT_FOUND' };
+    key.active = false;
+    key.revoked = true;
+    key.revokedAt = new Date();
+    key.revokeReason = reason || 'manual_revoke';
+    this.keys.set(keyId, key);
+    return { revoked: true, key_id: keyId, reason: key.revokeReason };
   }
 }
